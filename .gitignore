@@ -1,0 +1,8 @@
+/assg3-distrib/
+elm-stuff/build-artifacts/
+*.pdf
+*.log
+purescript-games
+*.swp
+*.suo
+.idea/
