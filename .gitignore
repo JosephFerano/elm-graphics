@@ -5,4 +5,5 @@ elm-stuff/build-artifacts/
 purescript-games
 *.swp
 *.suo
+index.html
 .idea/

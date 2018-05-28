@@ -15,7 +15,10 @@ import Task
 import WebGL.Texture as Texture exposing (..)
 import Color exposing (..)
 import Window
+import OBJ
+import OBJ.Types
 
+type alias ObjMesh = OBJ.Types.MeshWith OBJ.Types.Vertex
 
 main : Program Never Model Msg
 main = Html.program
@@ -26,8 +29,8 @@ main = Html.program
 
 
 type alias Model =
-    { t1 : Maybe Texture
-    , t2 : Maybe Texture
+    { texDict : Dict String Texture
+    , objDict : Dict String (OBJ.Types.MeshWith OBJ.Types.Vertex)
     , winSize : Window.Size
     , keys : Keys
     , pos : Vec3
@@ -35,14 +38,12 @@ type alias Model =
     , lookDir : Vec3
     , lastMousePos : Mouse.Position }
 
-type alias Vertex = { position : Vec3 , coord : Vec2 }
+type alias UTVertex = { position : Vec3 , coord : Vec2 }
 type alias Keys = { left : Bool ,  down : Bool , up : Bool , right : Bool , space : Bool }
-type alias Uniforms = { projection : Mat4 , view : Mat4 , model : Mat4 , texture : Texture }
-type TextureId = One | Two
 
 type Msg
-    = TextureLoaded1 (Result Texture.Error Texture)
-    | TextureLoaded2 (Result Texture.Error Texture)
+    = TextureLoaded (Result Texture.Error (String , Texture))
+    | ObjLoaded (Result String (String , ObjMesh))
     | Animate Time
     | WindowResized Window.Size
     | MouseMove Mouse.Position
@@ -51,8 +52,8 @@ type Msg
 init: ( Model , Cmd Msg )
 init =
     ( Model
-        Nothing
-        Nothing
+        Dict.empty
+        Dict.empty
         (Window.Size 1 1)
         (Keys False False False False False)
         (vec3 0 0 -10)
@@ -60,9 +61,22 @@ init =
         (vec3 0 0 1)
         { x = 0 , y = 0 }
     , Cmd.batch
-        [ loadTexture "textures/thwomp-face.jpg" TextureLoaded1
-        , loadTexture "textures/uv_big.png" TextureLoaded2
+        [ loadTex "Thwomp" "textures/thwomp-face.jpg"
+        , loadTex "UV" "textures/uv_big.png"
+        , loadTex "Tetra" "textures/tetra.png"
+        , loadObj "Teapot" "suz.obj"
         , Task.perform WindowResized Window.size] )
+
+loadTex: String -> String -> Cmd Msg
+loadTex id path =
+    Task.attempt
+        TextureLoaded
+        (Texture.load path
+        |> Task.map (\t -> (id , t) ) )
+
+loadObj: String -> String -> Cmd Msg
+loadObj id path =
+    OBJ.loadMeshWithoutTexture path (\ r -> Result.map (\ o -> (id , o)) r ) |> Cmd.map ObjLoaded
 
 subscriptions: Model -> Sub Msg
 subscriptions _ =
@@ -77,11 +91,17 @@ subscriptions _ =
 update: Msg -> Model -> (Model , Cmd Msg)
 update msg model =
     let m = case msg of
-            TextureLoaded1 result -> { model | t1 = Result.toMaybe result }
-            TextureLoaded2 result -> { model | t2 = Result.toMaybe result }
             KeyChange b k -> { model | keys = getKeys b k model.keys }
             Animate dt -> { model | pos = movePos model.keys model.lookDir model.pos }
             WindowResized size -> { model | winSize = size }
+            TextureLoaded result ->
+                case result of
+                    Ok (id , tex) -> { model | texDict = Dict.insert id tex model.texDict }
+                    Err e -> model
+            ObjLoaded result ->
+                case result of
+                    Ok (id , obj) -> { model | objDict = Dict.insert id obj model.objDict }
+                    Err e -> model |> Debug.log e
             MouseMove mp ->
                 let (ld , py) = getLookPos model.lastMousePos mp model.pitchAndYaw
                 in { model | lookDir = ld , lastMousePos = mp , pitchAndYaw = py }
@@ -91,26 +111,44 @@ view: Model -> Html Msg
 view model =
     WebGL.toHtml
         [ width model.winSize.width , height model.winSize.height , style [ ( "display" , "block") ] ]
-        ([ getEntity model wall (texturedPlane |> WebGL.triangles) model.t1
-        , getEntity model tetra (tetrahedron |> WebGL.triangles) model.t2
-        , getEntity model floor (texturedPlane |> WebGL.triangles) model.t2 ] |> List.concat)
+        ([ getEntity model wall (texturedPlane |> WebGL.triangles) "Thwomp"
+        , getEntity model tetraB (tetraBasic |> WebGL.triangles) "UV"
+        , getEntity model tetra (tetraF |> WebGL.triangles) "Tetra"
+        , getModel model (Mat4.makeScale3 5 5 5) "Teapot"
+        , getEntity model floor (texturedPlane |> WebGL.triangles) "UV" ] |> List.concat)
 
-wall = Mat4.identity
-floor = Mat4.makeTranslate3 0 -1 0
-        |> Mat4.rotate (pi / 2) ( vec3 1 0 0)
-        |> Mat4.scale3 15 15 0
-tetra = Mat4.makeTranslate3 5 4 5
-        |> Mat4.scale3 2 2 2
+getModel: Model -> Mat4 -> String -> List WebGL.Entity
+getModel model local id =
+    case Dict.get id model.objDict of
+        Just mesh ->
+            case Dict.get "UV" model.texDict of
+                Just t -> [ WebGL.entity
+                    unlitColorVS
+                    unlitColorFS
+                    (WebGL.indexedTriangles mesh.vertices mesh.indices)
+                    (UnlitColor
+                        (projectionMatrix model)
+                        (viewMatrix model)
+                        local
+                        (colorToVec3 Color.blue)) ]
+                Nothing -> []
+        Nothing -> []
 
-getEntity: Model -> Mat4 -> Mesh Vertex -> Maybe Texture -> List WebGL.Entity
-getEntity model local mesh tex =
-    case tex of
+colorToVec3: Color -> Vec3
+colorToVec3 color =
+    let to01 x = toFloat x / 255
+        c = Color.toRgb color
+    in vec3 (to01 c.red) (to01 c.green) (to01 c.blue)
+
+getEntity: Model -> Mat4 -> Mesh UTVertex -> String -> List WebGL.Entity
+getEntity model local mesh texId =
+    case Dict.get texId model.texDict of
         Just t ->
             [ WebGL.entity
-                vertexShader
-                fragmentShader
+                unlitTexturedVS
+                unlitTexturedFS
                 mesh
-                (Uniforms (projectionMatrix model) (viewMatrix model ) local t) ]
+                (UnlitTextured (projectionMatrix model) (viewMatrix model ) local t) ]
         Nothing -> []
 
 projectionMatrix: Model -> Mat4
@@ -169,21 +207,25 @@ getKeys isOn code keys =
         _ -> keys
 
 
-loadTexture: String -> (Result Error Texture -> Msg) -> Cmd Msg
-loadTexture path msg =
-    Task.attempt msg (Texture.load path)
-
 -------------
 -- Geometry
 -------------
 
-tetrahedron: List ( Vertex, Vertex, Vertex )
-tetrahedron =
-    let peak = Vertex (vec3 0 1 0) (vec2 1 1)
-        bottomLeft = Vertex (vec3 -1 -1 -1) (vec2 0 0)
-        bottomRight = Vertex (vec3 -1 -1 1) (vec2 1 0)
-        topLeft = Vertex (vec3 1 -1 1) (vec2 0 0)
-        topRight = Vertex (vec3 1 -1 -1) (vec2 0 1)
+wall = Mat4.identity
+floor = Mat4.makeTranslate3 0 -1 0
+        |> Mat4.rotate (pi / 2) ( vec3 1 0 0)
+        |> Mat4.scale3 15 15 0
+tetraB = Mat4.makeTranslate3 -5 1.5 5
+        |> Mat4.scale3 2 2 2
+tetra = Mat4.makeTranslate3 5 0 5
+
+tetraBasic: List ( UTVertex, UTVertex, UTVertex )
+tetraBasic =
+    let peak = UTVertex (vec3 0 1 0) (vec2 1 1)
+        bottomLeft = UTVertex (vec3 -1 -1 -1) (vec2 0 0)
+        bottomRight = UTVertex (vec3 -1 -1 1) (vec2 1 0)
+        topLeft = UTVertex (vec3 1 -1 1) (vec2 0 0)
+        topRight = UTVertex (vec3 1 -1 -1) (vec2 0 1)
     in [ ( peak , bottomLeft , bottomRight )
        , ( peak , bottomLeft , topRight )
        , ( peak , bottomRight , topLeft )
@@ -191,20 +233,78 @@ tetrahedron =
        , ( bottomLeft , bottomRight , topRight)
        , ( bottomRight, topLeft , topRight ) ]
 
-texturedPlane: List ( Vertex, Vertex, Vertex )
+tetraF: List ( UTVertex, UTVertex, UTVertex )
+tetraF =
+    let f0a = UTVertex (vec3 -1 -1 1) (vec2 0 0.5)
+        f0b = UTVertex (vec3 1 -1 1) (vec2 0.5 0.5)
+        f0c = UTVertex (vec3 0 1 0) (vec2 0.25 1)
+
+        f1a = UTVertex (vec3 -1 -1 -1) (vec2 0.5 0.5)
+        f1b = UTVertex (vec3 -1 -1 1) (vec2 1 0.5)
+        f1c = UTVertex (vec3 0 1 0) (vec2 0.75 1)
+
+        f2a = UTVertex (vec3 1 -1 -1) (vec2 0 0)
+        f2b = UTVertex (vec3 -1 -1 -1) (vec2 0.5 0)
+        f2c = UTVertex (vec3 0 1 0) (vec2 0.25 0.5)
+
+        f3a = UTVertex (vec3 1 -1 1) (vec2 0.5 0)
+        f3b = UTVertex (vec3 1 -1 -1) (vec2 1 0)
+        f3c = UTVertex (vec3 0 1 0) (vec2 0.75 0.5)
+    in [ ( f0a , f0b , f0c ) , ( f1a , f1b , f1c ) , ( f2a , f2b , f2c ) , ( f3a , f3b , f3c ) ]
+
+texturedPlane: List ( UTVertex, UTVertex, UTVertex )
 texturedPlane =
-    let topLeft = Vertex (vec3 -1 1 1) (vec2 0 1)
-        topRight = Vertex (vec3 1 1 1) (vec2 1 1)
-        bottomLeft = Vertex (vec3 -1 -1 1) (vec2 0 0)
-        bottomRight = Vertex (vec3 1 -1 1) (vec2 1 0)
+    let topLeft = UTVertex (vec3 -1 1 1) (vec2 0 1)
+        topRight = UTVertex (vec3 1 1 1) (vec2 1 1)
+        bottomLeft = UTVertex (vec3 -1 -1 1) (vec2 0 0)
+        bottomRight = UTVertex (vec3 1 -1 1) (vec2 1 0)
     in [ ( topLeft, topRight, bottomLeft ) , ( bottomLeft, topRight, bottomRight ) ]
+
+-------------
+-- Uniforms
+-------------
+
+type alias UnlitColor = { projection : Mat4 , view : Mat4 , model : Mat4 , color : Vec3 }
+type alias UnlitTextured = { projection : Mat4 , view : Mat4 , model : Mat4 , texture : Texture }
 
 -------------
 -- Shaders
 -------------
 
-vertexShader: Shader Vertex Uniforms { vcoord : Vec2 }
-vertexShader =
+unlitColorVS: Shader OBJ.Types.Vertex UnlitColor { vcolor : Vec3 }
+unlitColorVS =
+    [glsl|
+        attribute vec3 position;
+        attribute vec3 normal;
+        uniform mat4 projection;
+        uniform mat4 view;
+        uniform mat4 model;
+        uniform vec3 color;
+        varying vec3 vcolor;
+
+        void main()
+        {
+            gl_Position = projection * view * model * vec4(position, 1.0);
+            vcolor = color;
+        }
+    |]
+
+unlitColorFS: Shader {} UnlitColor { vcolor : Vec3 }
+unlitColorFS =
+    [glsl|
+
+        precision mediump float;
+        varying vec3 vcolor;
+
+        void main()
+        {
+            gl_FragColor = vec4(vcolor, 1.0);
+        }
+    |]
+
+
+unlitTexturedVS: Shader UTVertex UnlitTextured { vcoord : Vec2 }
+unlitTexturedVS =
     [glsl|
         attribute vec3 position;
         attribute vec2 coord;
@@ -220,8 +320,8 @@ vertexShader =
         }
     |]
 
-fragmentShader: Shader {} Uniforms { vcoord : Vec2 }
-fragmentShader =
+unlitTexturedFS: Shader {} UnlitTextured { vcoord : Vec2 }
+unlitTexturedFS =
     [glsl|
 
         precision mediump float;
