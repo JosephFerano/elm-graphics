@@ -8,6 +8,9 @@ import WebGL.Texture as Texture exposing (..)
 import OBJ
 import OBJ.Types
 
+type alias UTVertex = { position : Vec3 , coord : Vec2 }
+type alias ColorVertex = { position : Vec3 , normal : Vec3 , color : Vec3 }
+
 type alias UnlitColor = { projection : Mat4 , view : Mat4 , model : Mat4 , color : Vec3 }
 type alias UnlitTextured = { projection : Mat4 , view : Mat4 , model : Mat4 , texture : Texture }
 type alias DiffuseColor =

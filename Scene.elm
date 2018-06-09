@@ -44,8 +44,6 @@ type alias Model =
 
 type alias Robot = { pos : Vec3 , rot : Float , armRot : Float , handRot : Float }
 
-type alias UTVertex = { position : Vec3 , coord : Vec2 }
-type alias ColorVertex = { position : Vec3 , normal : Vec3 , color : Vec3 }
 type alias Keys =
     { left : Bool , down : Bool , up : Bool , right : Bool
     , w : Bool , a : Bool , s : Bool , d : Bool
@@ -78,7 +76,7 @@ init =
         [ loadTex "Thwomp" "textures/thwomp-face.jpg"
         , loadTex "UV" "textures/uv_big.png"
         , loadTex "Tetra" "textures/tetra.png"
---        , loadObj "Teapot" "suz.obj"
+--        , loadObj "Teapot" "models/suz.obj"
         , Task.perform WindowResized Window.size] )
 
 loadTex: String -> String -> Cmd Msg
@@ -195,12 +193,6 @@ getModel model local id =
                 Nothing -> []
         Nothing -> []
 
-colorToVec3: Color -> Vec3
-colorToVec3 color =
-    let to01 x = toFloat x / 255
-        c = Color.toRgb color
-    in vec3 (to01 c.red) (to01 c.green) (to01 c.blue)
-
 getEntity: Model -> Mat4 -> Mesh UTVertex -> String -> List WebGL.Entity
 getEntity model local mesh texId =
     case Dict.get texId model.texDict of
@@ -256,12 +248,11 @@ getLookPos lmp mp ( lastPitch , lastYaw ) =
         lookDir = vec3 (cos yaw * cos pitch_) (sin pitch_) (sin yaw * cos pitch_)
     in (Vec3.normalize lookDir , ( pitch_ , yaw ) )
 
-colorToRGB: Color -> Vec3
-colorToRGB c =
-    let cc = Color.toRgb c
-        convert x = toFloat x / 255
-    in vec3 (convert cc.red) (convert cc.green) (convert cc.blue)
-
+colorToVec3: Color -> Vec3
+colorToVec3 color =
+    let to01 x = toFloat x / 255
+        c = Color.toRgb color
+    in vec3 (to01 c.red) (to01 c.green) (to01 c.blue)
 
 movePos: (Bool, Bool, Bool, Bool) -> Vec3 -> Vec3 -> Float -> Vec3
 movePos ( left , down , up , right ) lookDir pos speed =
@@ -292,7 +283,7 @@ getKeys isOn code keys =
         85 -> { keys | u = isOn }
         74 -> { keys | j = isOn }
         78 -> { keys | n = isOn }
-        77 -> { keys | m = isOn } |> Debug.log "ITS HAPPENIGN"
+        77 -> { keys | m = isOn }
         _ -> keys
 
 
