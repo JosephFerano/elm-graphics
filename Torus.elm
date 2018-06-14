@@ -7,6 +7,7 @@ import Time exposing (Time)
 import Math.Matrix4 as Mat4 exposing (Mat4)
 import Math.Vector2 as Vec2 exposing (vec2, Vec2)
 import Math.Vector3 as Vec3 exposing (vec3, Vec3)
+import Math.Vector4 as Vec4 exposing (vec4, Vec4)
 import WebGL exposing (Mesh, Shader)
 import Color exposing (..)
 import Window
@@ -29,13 +30,16 @@ type Msg
 type alias Model =
     { p : Float
     , q : Float
+--    , mesh : Mesh Attributes
     , time : Float
     , winSize : Window.Size }
 
 init: ( Model , Cmd Msg )
 init =
-    ( { p = 1 , q = 1 , time = 0.0 , winSize = (Window.Size 1 1) }
---    ( { p = 9 , q = 7 , time = 0.0 , winSize = (Window.Size 1 1) }
+    ( { p = 1 , q = 0 , time = 0.0 , winSize = (Window.Size 1 1)
+--    ( { p = 19 , q = 16 , time = 0.0 , winSize = (Window.Size 1 1)
+--    , mesh = (torusPoints 2 15 |> torusShell)
+    }
     , Cmd.batch [ Task.perform WindowResized Window.size ] )
 
 
@@ -50,7 +54,7 @@ update msg model =
     let m = case msg of
             Animate dt ->
                 { model | time = model.time + dt * 0.001 }
---                { model | time = model.time + dt * 0.001 , p = model.p + 0.002 , q = model.q + 0.015}
+--                { model | time = model.time + dt * 0.001 , p = model.p + 0.008 , q = model.q + 0.005}
 --            Animate dt -> model
             WindowResized size -> { model | winSize = size }
     in ( m , Cmd.none )
@@ -64,7 +68,9 @@ view model =
         ([ WebGL.entity
             diffuseVS
             diffuseFS
-            (torusPoints model |> torusShell)
+--            model.mesh
+            (constructTorus model)
+--            (constructTorus2 model)
             (DiffuseColor
                 (Mat4.makePerspective
                     50
@@ -76,35 +82,121 @@ view model =
 --                (Mat4.makeRotate (pi) (vec3 0.3 0.5 1 ) )
 --                Mat4.identity
                 (colorToVec3 Color.white)
-                (vec3 1 1 0)
-                (vec3 1 0 1)
-                (vec3 0 0 1)
+                (vec3 1 1 1)
+                (vec3 1 1 1)
+                (vec3 1 1 1)
                 1.0) ] )
 
-totalLinePoints = 30
-ringRadius = 2
-ringVerts = 8
+totalLinePoints = 14
+ringRadius = 0.15
+ringVerts = 12
 
-torusPoints: Model -> List (Vec3 , Vec3)
-torusPoints model =
-    List.range 0 totalLinePoints
-    |> List.map (\ step -> (pi * 2.0 / totalLinePoints * (toFloat step)) )
+constructTorus: Model -> Mesh Attributes
+constructTorus model =
+    let points = torusPoints model.p model.q |> makePairs
+--        rings = torusRings points |> List.concatMap makePairs
+--    in points ++ rings |> toLines
+    in points |> toLines
+
+
+constructTorus2: Model -> Mesh Attributes
+constructTorus2 model =
+    torusPoints model.p model.q
+    |> makePairs
+    |> torusRings
+    |> torusTris
+    |> withTris
+
+withTris: List (Vec3 , Vec3 , Vec3) -> Mesh Attributes
+withTris tris =
+    tris
+    |> List.map (\ (v1, v2, v3) ->
+        let n = Vec3.cross (Vec3.sub v1 v2) (Vec3.sub v3 v1) |> Vec3.normalize
+        in (toAttributes v1 n, toAttributes v2 n, toAttributes v3 n))
+    |> WebGL.triangles
+
+torusPoints: Float -> Float -> List Vec3
+torusPoints p q =
+    interpolatedCircle totalLinePoints
     |> List.map
         (\ t ->
-            let r = 0.5 * (2 + sin (model.q * t))
+            let r = 0.5 * (2 + sin (q * t))
             in vec3
-                 (cos (t * model.p) * r)
-                 (cos (t * model.q) * r * 0.5)
-                 (sin (t * model.p) * r) )
-    |> 
+                 (cos (t * p) * r)
+                 (cos (t * q) * r * 0.5)
+                 (sin (t * p) * r) )
 
-
-torusShell: List Vec3 -> Mesh Attributes
-torusShell verts =
+torusRings: List (Vec3, Vec3) -> List (List Vec3)
+torusRings verts =
     verts
-    |> List.map (\ v1 -> Attributes v1 Vec3.i )
-    |> WebGL.lineStrip
+    |> List.map
+        (\ (p1, p2)->
+            (List.map circlePoint <| interpolatedCircle ringVerts)
+            |> List.map (\ p ->
+                let (mid , dir) = (Vec3.add p1 p2 |> Vec3.scale 0.5 , Vec3.sub p2 p1 |> Vec3.normalize)
+                    p_ = Vec3.toRecord p
+                    dir_ = Vec3.toRecord dir
+                    u = Vec3.cross dir Vec3.j |> Vec3.normalize
+                    v = Vec3.cross dir u |> Vec3.normalize
+                    point = Vec3.add (Vec3.scale p_.x u) (Vec3.scale p_.y v) |> Vec3.scale ringRadius
+                in Vec3.add point mid))
 
+torusTris: List (List Vec3) -> List (Vec3 , Vec3 , Vec3)
+torusTris rings =
+    closedPairs rings
+    |> List.concatMap
+        (\ (rs1 , rs2) ->
+            List.map2 (,) (makePairs rs1) (makePairs rs2)
+            |> List.concatMap
+                (\ (pair1 , pair2) ->
+                    let a = Tuple.first pair1
+                        b = Tuple.second pair1
+                        c = Tuple.first pair2
+                        d = Tuple.second pair2
+                    in [ (a , b , c) , (d , c , b) ] ) )
+
+--torusTris: List (List Vec3) -> ( List Vec3 , List (Int, Int, Int) )
+--torusTris rings =
+--    let verts = List.filterMap rings
+--        indices = List.map closedPairs rings
+--            |> List.indexedMap
+--                (\ (i , (rs1 , rs2)) ->
+--                    List.map2 (,) (closedPairs rs1) (closedPairs rs2)
+--                    |> List.indexedMap
+--                        (\ (j , (pair1 , pair2)) ->
+--                            let n = j + i * ringVerts
+--                                a = (j % (ringVerts - 1)) + n
+--                                b = a + b
+--                                c = a + b
+--                                d = 0
+--                            in (a , b , 0) ) )
+--    in ( verts , indices )
+
+circlePoint: Float -> Vec3
+circlePoint x = vec3 (cos x) (sin x) 0
+
+makePairs: List a -> List (a ,a)
+makePairs ps = List.map2 (,) ps (List.drop 1 ps)
+
+closedPairs: List a -> List (a ,a)
+closedPairs xs =
+    List.map2 (,)
+        xs
+        (case List.head xs of
+            Just x -> List.append (List.drop 1 xs) [ x ]
+            Nothing -> []
+        )
+
+toLines: List (Vec3 , Vec3) -> Mesh Attributes
+toLines vs = List.map (\ (v1 , v2) -> (toAttributes v1 Vec3.i , toAttributes v2 Vec3.i) ) vs |> WebGL.lines
+
+interpolatedCircle: Int -> List Float
+interpolatedCircle steps =
+    List.range 0 steps
+    |> List.map (\ step -> (pi * 2 / (toFloat steps) * (toFloat step) ) )
+
+toAttributes: Vec3 -> Vec3 -> Attributes
+toAttributes v n = Attributes v n
 
 
 colorToVec3: Color -> Vec3
@@ -142,7 +234,7 @@ diffuseVS =
         {
             gl_Position = projection * view * model * vec4(position, 1.0);
 
-            vec3 lightDir = normalize(vec3(0.0, -0.0, -1.0));
+            vec3 lightDir = normalize(vec3(0.0, -0.5, -0.5));
             vec4 norm =  model * vec4(normal, 0.0);
             vec3 n = norm.xyz;
             float dir = max(dot(n, lightDir), 0.0);
