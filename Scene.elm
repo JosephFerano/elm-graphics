@@ -76,7 +76,7 @@ init =
         [ loadTex "Thwomp" "textures/thwomp-face.jpg"
         , loadTex "UV" "textures/uv_big.png"
         , loadTex "Tetra" "textures/tetra.png"
---        , loadObj "Teapot" "models/suz.obj"
+        , loadObj "Teapot" "models/suz.obj"
         , Task.perform WindowResized Window.size] )
 
 loadTex: String -> String -> Cmd Msg
@@ -128,10 +128,11 @@ updateRobot: Model -> Time -> Robot
 updateRobot { robot , keys } dt =
     let rr part = part + dt * 0.005
         rl part = part - dt * 0.005
+        rot = radians robot.rot
     in { pos =
            movePos
                (keys.left, keys.down, keys.up, keys.right)
-               (vec3 (sin <| radians robot.rot) (sin <| radians robot.rot) (cos <| radians robot.rot))
+               (vec3 (sin rot) (sin rot) (cos rot))
                robot.pos
                0.1
     , rot = if keys.n then rr robot.rot else if keys.m then rl robot.rot else robot.rot

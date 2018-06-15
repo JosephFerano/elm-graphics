@@ -37,7 +37,7 @@ type alias Model =
 init: ( Model , Cmd Msg )
 init =
     ( { p = 1 , q = 0 , time = 0.0 , winSize = (Window.Size 1 1)
---    ( { p = 19 , q = 16 , time = 0.0 , winSize = (Window.Size 1 1)
+--    ( { p = 949 , q = 956 , time = 0.0 , winSize = (Window.Size 1 1)
 --    , mesh = (torusPoints 2 15 |> torusShell)
     }
     , Cmd.batch [ Task.perform WindowResized Window.size ] )
@@ -53,9 +53,10 @@ update: Msg -> Model -> (Model , Cmd Msg)
 update msg model =
     let m = case msg of
             Animate dt ->
-                { model | time = model.time + dt * 0.001 }
---                { model | time = model.time + dt * 0.001 , p = model.p + 0.008 , q = model.q + 0.005}
+--                { model | time = model.time + dt * 0.001 }
+                { model | time = model.time + dt * 0.001 , p = model.p + 0.08 , q = model.q + 0.04}
 --            Animate dt -> model
+
             WindowResized size -> { model | winSize = size }
     in ( m , Cmd.none )
 
@@ -69,8 +70,8 @@ view model =
             diffuseVS
             diffuseFS
 --            model.mesh
-            (constructTorus model)
---            (constructTorus2 model)
+--            (constructTorus model)
+            (constructTorus2 model)
             (DiffuseColor
                 (Mat4.makePerspective
                     50
@@ -81,22 +82,24 @@ view model =
                 (Mat4.makeRotate (model.time * 0.5) (vec3 1 1 1 ) )
 --                (Mat4.makeRotate (pi) (vec3 0.3 0.5 1 ) )
 --                Mat4.identity
-                (colorToVec3 Color.white)
+                (colorToVec3 Color.red)
+--                (colorToVec3 Color.darkGrey)
+--                (colorToVec3 Color.white)
                 (vec3 1 1 1)
                 (vec3 1 1 1)
                 (vec3 1 1 1)
                 1.0) ] )
 
-totalLinePoints = 14
+totalLinePoints = 100
 ringRadius = 0.15
-ringVerts = 12
+ringVerts = 18
 
 constructTorus: Model -> Mesh Attributes
 constructTorus model =
     let points = torusPoints model.p model.q |> makePairs
---        rings = torusRings points |> List.concatMap makePairs
---    in points ++ rings |> toLines
-    in points |> toLines
+        rings = torusRings points |> List.concatMap makePairs
+    in points ++ rings |> toLines
+--    in points |> toLines
 
 
 constructTorus2: Model -> Mesh Attributes
@@ -106,6 +109,7 @@ constructTorus2 model =
     |> torusRings
     |> torusTris
     |> withTris
+--    |> wireframe |> List.map (\ x -> toAttributes x Vec3.i) |> WebGL.lineStrip
 
 withTris: List (Vec3 , Vec3 , Vec3) -> Mesh Attributes
 withTris tris =
@@ -126,6 +130,7 @@ torusPoints p q =
                  (cos (t * q) * r * 0.5)
                  (sin (t * p) * r) )
 
+
 torusRings: List (Vec3, Vec3) -> List (List Vec3)
 torusRings verts =
     verts
@@ -143,7 +148,7 @@ torusRings verts =
 
 torusTris: List (List Vec3) -> List (Vec3 , Vec3 , Vec3)
 torusTris rings =
-    closedPairs rings
+    makePairs rings
     |> List.concatMap
         (\ (rs1 , rs2) ->
             List.map2 (,) (makePairs rs1) (makePairs rs2)
@@ -154,6 +159,10 @@ torusTris rings =
                         c = Tuple.first pair2
                         d = Tuple.second pair2
                     in [ (a , b , c) , (d , c , b) ] ) )
+
+wireframe: List (Vec3 , Vec3 , Vec3) -> List Vec3
+wireframe tris =
+    List.foldl (\ (v1, v2, v3) acc -> acc ++ [ v1 , v2 , v3 ] ) [] tris
 
 --torusTris: List (List Vec3) -> ( List Vec3 , List (Int, Int, Int) )
 --torusTris rings =
