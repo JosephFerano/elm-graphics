@@ -2,8 +2,10 @@
 elm-stuff/build-artifacts/
 *.pdf
 *.log
-purescript-games
 *.swp
 *.suo
-index.html
+*.html
+presentation/
+final/
 .idea/
+*.zip
