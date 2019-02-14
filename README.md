@@ -14,11 +14,17 @@ python server is needed.
 ##### Controls
 
 Mouse - Look Rotation
+
 WASD - Player movement
+
 ◀ ▼ ▲ ▶ - Move the Robot
+
 N and M - Rotate robot left and right
+
 Y and H - Rotate robot arm up and down
+
 U and J - Rotate robot hand up and down
+
 
 ### PQTorusknot
 
