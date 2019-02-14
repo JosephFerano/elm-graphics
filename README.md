@@ -8,6 +8,9 @@ Open `scene.html` with an http server, you can use the following;
 Unfortunately, elm-reactor has issues with loading obj files so that's why the
 python server is needed.
 
+![alt text](screenshots/elm-fps.png "FPS Scene")
+
+
 ##### Controls
 
 Mouse - Look Rotation
@@ -23,18 +26,8 @@ Either open up `torus.html`, or use the command `elm-reactor`, if you want to be
 
 https://guide.elm-lang.org/install.html
 
-Alternatively, here's the Ellie link, so you can easily modify and compile;
+Alternatively, here's the Ellie link
 
 https://ellie-app.com/vVTgpBj77ra1
 
-##### Constants you can modify
-
-// Total verts in the line
-totalLinePoints = 100
-// Radius of the torus
-ringRadius = 0.15
-// Amount of verts in each ring
-ringVerts = 18
-
-// The model.p and model.q increment speeds
-{ model | time = model.time + dt * 0.001 , p = model.p + 0.08 , q = model.q + 0.04}
+![alt text](screenshots/elm-knot.png "PQ Torus Knot")
