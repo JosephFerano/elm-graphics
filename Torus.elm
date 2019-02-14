@@ -164,23 +164,6 @@ wireframe: List (Vec3 , Vec3 , Vec3) -> List Vec3
 wireframe tris =
     List.foldl (\ (v1, v2, v3) acc -> acc ++ [ v1 , v2 , v3 ] ) [] tris
 
---torusTris: List (List Vec3) -> ( List Vec3 , List (Int, Int, Int) )
---torusTris rings =
---    let verts = List.filterMap rings
---        indices = List.map closedPairs rings
---            |> List.indexedMap
---                (\ (i , (rs1 , rs2)) ->
---                    List.map2 (,) (closedPairs rs1) (closedPairs rs2)
---                    |> List.indexedMap
---                        (\ (j , (pair1 , pair2)) ->
---                            let n = j + i * ringVerts
---                                a = (j % (ringVerts - 1)) + n
---                                b = a + b
---                                c = a + b
---                                d = 0
---                            in (a , b , 0) ) )
---    in ( verts , indices )
-
 circlePoint: Float -> Vec3
 circlePoint x = vec3 (cos x) (sin x) 0
 
